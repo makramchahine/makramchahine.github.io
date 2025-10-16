@@ -1,0 +1,503 @@
+<!DOCTYPE HTML>
+<!-- CompreSSM Blog — Paper Walkthrough (drop-in for projects/compressm.html) -->
+<html>
+<head>
+	<title>CompreSSM Blog – Makram Chahine</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+	<link rel="stylesheet" href="../assets/css/main.css" />
+	<link rel="stylesheet" href="../assets/css/academicons.min.css">
+	<!-- MathJax for LaTeX rendering (scoped to this page) -->
+	<script type="text/javascript">
+	window.MathJax = {
+	  tex: { tags: "ams", inlineMath: [['$', '$'], ['\\(', '\\)']] },
+	  options: { skipHtmlTags: ['script','noscript','style','textarea','pre'] }
+	};
+	</script>
+	<script defer id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+details {
+  cursor: pointer;
+  margin-top: 1.5em;
+}
+
+details summary {
+  font-weight: bold;
+  list-style: none;
+  font-size: 1.05em;
+}
+
+details summary::before {
+  content: "▸";
+  display: inline-block;
+  font-size: 1.4em;
+  margin-right: 0.4em;
+  transition: transform 0.2s;
+  vertical-align: middle;
+}
+
+details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+/* Container for smooth animation */
+details .content-wrapper {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.35s ease, padding 0.35s ease;
+}
+
+/* Apply box styling */
+details[open] .content-wrapper {
+  max-height: 500px; /* should be larger than content height */
+  padding: 1em;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  margin-top: 0.8em; /* space from summary */
+}
+</style>
+<style>
+  .lemma-box {
+    border: 2px solid #A31F34; /* red border */
+    background-color: #f8d7da; /* lighter shaded background */
+    padding: 1em 1.2em;
+    margin: 1.5em 0;
+    border-radius: 8px;
+  }
+  .lemma-box h4 {
+    margin-top: 0;
+    color: #A31F34; /* red color for heading */
+  }
+  .lemma-box p {
+    margin: 0.6em 0;
+  }
+  .lemma-box p.center {
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.05em;
+  }
+</style>
+</head>
+<body class="is-preload">
+
+	<!-- Wrapper -->
+	<div id="wrapper">
+
+		<!-- Main -->
+		<div id="main">
+			<div class="inner">
+
+				<!-- Header -->
+				<header id="header">
+					<a href="../index.html" class="logo"><strong>Makram Chahine</strong></a>
+					<ul class="icons">
+						<li><a href="https://scholar.google.com/citations?user=UzM0rckAAAAJ&hl=en" class="ai ai-google-scholar ai-2x"></a></li>
+						<li><a href="../files/MC_resume.pdf" class="ai ai-cv ai-2x"></a></li>
+					</ul>
+				</header>
+
+				<!-- Banner / Lead -->
+				<section id="banner">
+					<div class="content">
+						<header>
+                                            <h1>CompreSSM walkthrough</h1>
+                                            <p><a href="../index.html">&#8592; Homepage</a></p>
+                                        </header>
+                                        <p>
+                                            This blog post breaks down our work: <strong>The Curious Case of In-Training Compression of State Space Models</strong> with
+                                            <a href="https://phnazari.github.io" target="_blank">Philipp Nazari</a>,
+                                            <a href="https://danielarus.csail.mit.edu" target="_blank">Daniela Rus</a>, and
+                                            <a href="https://camail.org" target="_blank">T. Konstantin Rusch</a>.
+                                        </p>
+                                        <p>
+                                            You can follow the links for the <a href="https://www.arxiv.org/abs/2510.02823">paper</a> and <a href="https://github.com/camail-official/compressm" target="_blank">implementation</a>.
+                                        </p>
+
+                                        <section id="motivation" style="margin-top:2em;">
+                                          <h2>Motivation</h2>
+                                          <p>
+                                            State-space models (SSMs) are a potent tool for sequence modeling. At their core, all they rely on an incremental recurrence: at each step, the model updates a hidden state that summarizes all relevant information from the past.
+                                          </p>
+                                          <p>
+                                            The cost of computing an update scales with the dimension of the hidden state, yet its different dimensions are far from being equally important. Some may be redundant or offer no contribution to the learning process. Hence, our motivation: <strong>identify</strong> and <strong>truncate</strong> the unnecessary parts of the hidden state <strong>in-training</strong> without sacrificing performance.
+                                          </p>
+                                          <details>
+                                            <summary>Why compress in-training?</summary>
+                                            <div class="content-wrapper">
+                                            <p>
+                                                If we detect low-energy state directions early and truncate them on the fly, the model spends most of training in its <em>compressed</em> form. That means faster optimization, lower memory footprint, and performance that tracks the larger model at a fraction of the computational cost.
+                                            </p>
+                                            </details>
+                                        </section>
+
+				<section id="insight" style="margin-top:2em;">
+                <h2>Major Insight</h2>
+                <p>
+                    There is a core obstacle in pruning <em>in-training</em> snapshots: can we ensure that we do not remove parts of the hidden state early that might become useful later?
+                </p>
+                <p>
+                    Our key insight: we can not only <strong>compute the influence of each dimension</strong> as <em>Hankel singular values</em>, but also <strong>track their long-term impact</strong>. We show this by leveraging the <em>symmetry</em> of the Hankel matrix, its <em>continuity</em> with respect to gradient updates, and the application of <em>Weyl’s theorem</em>.
+                </p>
+                <p>
+                    Empirically, we observe a striking pattern: <strong>low-energy directions stay low-energy throughout training</strong>. Their relative contribution remains consistently small as optimization progresses. This makes early pruning fundamentally different from naive parameter dropout — it becomes <em>predictive</em> rather than speculative.
+                </p>
+                <!-- <p>
+                    In short, <strong>if a state dimension has little dynamical energy early on, it is unlikely to matter later</strong>. That is what makes <em>in-training compression</em> not only possible but reliable.
+                </p> -->
+                </section>
+
+				<!-- Preliminaries -->
+				<section id="preliminaries" style="margin-top:2em;">
+					<h2>Mathematical Preliminaries</h2>
+
+					<p>We use discrete Linear Time-Invariant (LTI) systems as the foundation as they capture the essence of most SSMs. A system $\mathcal{G}$ is defined by the following state-space equations for $k \in \mathbb{N}$:</p>
+
+					<div class="math-block">
+						\[
+						\begin{aligned}
+							\mathbf{h}(k+1) &= \mathbf{A}\,\mathbf{h}(k) + \mathbf{B}\,\mathbf{x}(k),\quad \mathbf{h}(0)=\mathbf{h}_0,\\
+							\mathbf{y}(k)   &= \mathbf{C}\,\mathbf{h}(k) + \mathbf{D}\,\mathbf{x}(k),
+						\end{aligned}
+						\]
+					</div>
+                    <p>
+                    where $\mathbf{h} \in \mathbb{R}^{n}$ is the state, $\mathbf{x} \in \mathbb{R}^{p}$ the input, and $\mathbf{y} \in \mathbb{R}^{q}$ the output, 
+                    with the state matrices $\mathbf{A} \in \mathbb{R}^{n \times n}$, $\mathbf{B} \in \mathbb{R}^{n \times p}$, $\mathbf{C} \in \mathbb{R}^{q \times n}$, 
+                    and $\mathbf{D} \in \mathbb{R}^{q \times p}$.
+                    </p>
+
+					<details>
+                        <p> We make standard assumptions that are usually incorporated into SSMs by design:</p>
+                    <summary>Assumptions</summary>
+                    <div class="content-wrapper">
+                    <p><strong>1. Stability.</strong>  
+                    The system is stable, i.e., all eigenvalues of $\mathbf{A}$ satisfy $|\lambda_i| < 1$.</p>
+
+                    <p><strong>2. Controllability.</strong>  
+                    The pair $(\mathbf{A}, \mathbf{B})$ is controllable, meaning the state $\mathbf{h}$ can be steered from any initial state to any final state in finite time.</p>
+
+                    <p><strong>3. Observability.</strong>  
+                    The pair $(\mathbf{A}, \mathbf{C})$ is observable, i.e., observing the input $\mathbf{x}$ and output $\mathbf{y}$ over a finite time suffices to determine the initial state $\mathbf{h}_0$.</p>
+                    </details>
+				</section>
+
+                <!-- Balanced truncation -->
+                <section id="balanced-truncation" style="margin-top:2em;">
+                <h2>Balanced Truncation</h2>
+
+                <p>
+                    Not all hidden state directions in a state-space model contribute equally. 
+                    Balanced truncation allows us to systematically remove weak states while preserving stability and controlling approximation error. 
+                    The key idea: rank each state by how easily it can be influenced by inputs and how strongly it appears in the outputs.
+                </p>
+
+                <p>
+                    This ranking is captured by the <strong>controllability</strong> and <strong>observability Gramians</strong>, $\mathbf{P}$ and $\mathbf{Q}$.
+                    <details>
+                    <summary>Gramians computation</summary>
+                    <div class="content-wrapper">
+                    <p>
+                        These satisfy the discrete Lyapunov equations:
+                    </p>
+                    <p style="text-align:center;">
+                    $$
+                    \begin{aligned}
+                        \mathbf{A}\mathbf{P}\mathbf{A}^\top - \mathbf{P} + \mathbf{B}\mathbf{B}^\top &= 0, 
+                        &\mathbf{P} = \sum_{i=0}^\infty \mathbf{A}^i \mathbf{B}\mathbf{B}^\top (\mathbf{A}^\top)^i \\[0.5em]
+                        \mathbf{A}^\top \mathbf{Q} \mathbf{A} - \mathbf{Q} + \mathbf{C}^\top \mathbf{C} &= 0,
+                        &\mathbf{Q} = \sum_{i=0}^\infty (\mathbf{A}^\top)^i \mathbf{C}^\top \mathbf{C} \mathbf{A}^i
+                    \end{aligned}
+                    $$
+                    </p>
+                    <p>
+                        Large entries in $\mathbf{P}$ indicate states that are easy to control, while large entries in $\mathbf{Q}$ indicate states that are easy to observe.
+                    </p>
+                    </details>
+                </p>
+
+                <p>
+                    Any minimal system can be transformed into a <strong>balanced realization</strong>, where the Gramians are equal and diagonal:
+                </p>
+
+                <p style="text-align:center;">
+                    $$ \mathbf{P} = \mathbf{Q} = \mathbf{W} = \operatorname{diag}(\sigma_1, \dots, \sigma_n), \quad \sigma_1 \ge \dots \ge \sigma_n > 0 $$
+                </p>
+
+                <p>
+                    Here, $\sigma_i$ are the <strong>Hankel singular values (HSVs)</strong>, providing an <em>energy ranking</em> of the state dimensions.
+                    Large $\sigma_i$ correspond to states that strongly influence the input-output behavior, while small ones contribute weakly.
+                </p>
+
+                <p>
+                    Any minimal realization $(\mathbf{A},\mathbf{B},\mathbf{C},\mathbf{D})$ can be converted to balanced coordinates using an invertible transformation $\mathbf{T}$:
+                </p>
+
+                <p style="text-align:center;">
+                    $$ (\mathbf{A}_b, \mathbf{B}_b, \mathbf{C}_b) = (\mathbf{T}^{-1}\mathbf{A}\mathbf{T}, \mathbf{T}^{-1}\mathbf{B}, \mathbf{C}\mathbf{T}) $$
+                </p>
+
+                <p>
+                    Once balanced, the state can be partitioned according to the HSVs. Keeping only the top $r$ dimensions gives the reduced system:
+                </p>
+
+                <p style="text-align:center;">
+                $$
+                \mathbf{A}_b = \begin{bmatrix} \mathbf{A}_{11} & \mathbf{A}_{12} \\ \mathbf{A}_{21} & \mathbf{A}_{22} \end{bmatrix},\quad
+                \mathbf{B}_b = \begin{bmatrix} \mathbf{B}_1 \\ \mathbf{B}_2 \end{bmatrix},\quad
+                \mathbf{C}_b = \begin{bmatrix} \mathbf{C}_1 & \mathbf{C}_2 \end{bmatrix},\quad
+                \hat{\mathcal{G}} = (\mathbf{A}_{11}, \mathbf{B}_1, \mathbf{C}_1, \mathbf{D})
+                $$
+                </p>
+
+                <p>
+                    The reduced system remains stable, and the input-output error is bounded:
+                </p>
+
+                <p style="text-align:center;">
+                    $$ \|\mathcal{G} - \hat{\mathcal{G}}\|_\infty \le 2 \sum_{i=r+1}^n \sigma_i $$
+                </p>
+
+                <p>
+                    <details>
+                    <summary>Additional details</summary>
+                    <div class="content-wrapper">
+                    <p>
+                        HSVs can also be computed directly from the original Gramians without explicitly forming $\mathbf{T}$:
+                    </p>
+                    <p style="text-align:center;">
+                        $$ \sigma_i = \sqrt{\lambda_i(\mathbf{P}\mathbf{Q})}, \quad \text{sorted in decreasing order} $$
+                    </p>
+                    <p>
+                        Efficient algorithms exist to solve the Lyapunov equations and compute the transformation $\mathbf{T}$. 
+                        In CompreSSM, we exploit this structure dynamically <em>during training</em> rather than as a post-hoc compression step.
+                    </p>
+                    </details>
+                </p>
+
+                <p>
+                    In summary, balanced truncation provides a rigorous, principled method to compress a state-space model while retaining its dominant dynamics.
+                    Hankel singular values serve as an intuitive "energy ranking" of the states, guiding which dimensions can be safely truncated.
+                </p>
+                </section>
+
+
+
+				<!-- Core theoretical contributions -->
+				<section id="in-training-reduction" style="margin-top:2em;">
+                <h2>In-Training Reduction</h2>
+
+                <p>
+                    When training SSMs with gradient descent, the state matrices are updated incrementally. 
+                    Understanding how the Hankel singular values evolve under these updates is crucial for safe early reduction of state dimensions.
+                </p>
+
+                <p>
+                    Intuitively, in-training truncation is valid if:
+                    <ul>
+                    <li>We can track the importance of each state dimension continuously during training.</li>
+                    <li>Dimensions initially identified as negligible remain relatively unimportant.</li>
+                    <li>The cumulative contribution of the least important dimensions stays small compared to the total system energy.</li>
+                    </ul>
+                </p>
+
+                <h3>Hankel Singular Values Continuity</h3>
+                <p>
+                    Mathematically, between gradient steps, the state matrices $(\mathbf{A},\mathbf{B},\mathbf{C})$ are perturbed:
+                </p>
+
+                <p style="text-align:center;">
+                    $$ \mathbf{A}' = \mathbf{A} + \delta \mathbf{A}, \quad
+                    \mathbf{B}' = \mathbf{B} + \delta \mathbf{B}, \quad
+                    \mathbf{C}' = \mathbf{C} + \delta \mathbf{C} $$
+                </p>
+
+                <p>
+                    The Hankel matrix $\mathbf{H}$ defined by:
+                        $$ \mathbf{H} = \sqrt{\mathbf{P}^{1/2} \mathbf{Q} \mathbf{P}^{1/2}} $$
+                        is  symmetric positive definite, and its eigenvalues are exactly the Hankel singular values. It is easy to see that $\mathbf{H}$ depends continuously on the system matrices $(\mathbf{A},\mathbf{B},\mathbf{C})$. 
+                        Let $\mathbf{H}' = \mathbf{H} + \delta \mathbf{H}$ denote the post-update matrix.
+                    </p>
+                    <p>
+                    We can apply Weyl’s theorem to bound how much the HSVs can change between gradient steps.
+                    </p>
+
+                <p>
+                    <details>
+                    <summary>Hermitian spectral stability (Weyl’s Theorem)</summary>
+                    <div class="content-wrapper">
+                    <p>
+                        Let $\mathbf{W}$ and $\mathbf{W}'$ be Hermitian matrices and define $\delta \mathbf{W} = \mathbf{W}' - \mathbf{W}$. 
+                        Let $\lambda_i(\mathbf{W})$ denote the $i$-th largest eigenvalue. Then, by Weyl’s theorem:
+                    </p>
+                    <p style="text-align:center;">
+                        $$ |\lambda_i(\mathbf{W}') - \lambda_i(\mathbf{W})| \le \max_i |\lambda_i(\delta \mathbf{W})| $$
+                    </p>
+                    <p>
+                        In other words, the eigenvalues of a Hermitian matrix cannot change more than the largest eigenvalue of the perturbation. 
+                    </p>
+                    </details>
+                </p>
+
+                <div class="lemma-box">
+                <h4>Lemma: Continuity of Hankel singular values under training updates</h4>
+                <p>Applying Weyl’s theorem to $\mathbf{H}$ and its perturbation $\mathbf{H}'$ yields:</p>
+                <p class="center">
+                    $$ |\sigma_i' - \sigma_i| \le \max_i |\lambda_i(\delta \mathbf{H})| $$
+                </p>
+                <p>This ensures that between gradient steps, each Hankel singular value can change at most by the largest absolute eigenvalue of $\delta \mathbf{H}$.</p>
+                </div>
+
+                <p>
+                    In practice, empirical evidence amassed on a variety of datasets, number of blocks, and state dimensions, shows that:
+                    <ul>
+                    <li>The ordering of singular values is largely preserved, especially for the small HSVs.</li>
+                    <li>The cumulative energy of the bottom-$r$ HSVs remains low throughout training.</li>
+                    <li>Probable HSV trajectories can be tracked using step-by-step assignment, with continuity bounds mitigating overlaps.</li>
+                    </ul>
+                </p>
+
+                <p>
+                    <img src="../files/hankel_analysis.png" alt="Hankel Singular Values Evolution" style="width:100%; max-width:800px; margin-top:1em;">
+                    <details>
+                    <summary>Empirical illustration details</summary>
+                    <div class="content-wrapper">
+                    <p>
+                        We plot the evolution of HSVs for a single LRU block trained on MNIST with state dimension 8:
+                        <ul>
+                        <li>Raw HSVs over training steps.</li>
+                        <li>Maximum absolute eigenvalue of $\delta \mathbf{H}$ per step.</li>
+                        <li>Probable HSV trajectories overlaid using the continuity bound.</li>
+                        <li>Relative contribution of the bottom-$r$ HSVs.</li>
+                        </ul>
+                    </p>
+                    <p>
+                        These plots confirm that dimensions with small early HSVs typically remain negligible, justifying in-training truncation.
+                    </p>
+                    </details>
+                </p>
+
+                <p>
+                    In summary, by combining Weyl’s theorem, continuity of the symmetric Hankel matrix, and empirical tracking of singular values, 
+                    we can confidently assume that in most cases low-energy state dimensions identified early in training can be reduced without compromising the final model’s performance.
+                </p>
+                </section>
+
+
+				<!-- Algorithm: precise steps with equations -->
+				<section id="algorithm" style="margin-top:2em;">
+					<h2>The CompreSSM algorithm</h2>
+
+                    <p>
+                        We periodically compress the state-space model during training by following these steps at each SSM block:
+                    </p>
+
+					<ol>
+						<li><strong>Extract system matrices</strong> from the block weights:
+							\(\mathbf{A}\in\mathbb{R}^{n\times n},\;\mathbf{B}\in\mathbb{R}^{n\times p},\;\mathbf{C}\in\mathbb{R}^{q\times n}.\)
+						</li>
+
+						<li><strong>Solve discrete Lyapunov equations</strong> for Gramians:
+							\[
+							\mathbf{A}\mathbf{P}\mathbf{A}^\top - \mathbf{P} + \mathbf{B}\mathbf{B}^\top = 0,\qquad
+							\mathbf{A}^\top\mathbf{Q}\mathbf{A} - \mathbf{Q} + \mathbf{C}^\top\mathbf{C} = 0.
+							\]
+							<!-- <small class="note">(Use specialized solvers; if $\mathbf{A}$ is diagonal a closed-form per-coordinate sum exists.)</small> -->
+						</li>
+
+						<li><strong>Compute HSVs</strong>:
+							\[
+							\boldsymbol{\sigma} = \operatorname{sort}_{\downarrow}\big(\sqrt{\mathrm{spec}(\mathbf{P}\mathbf{Q})}\big).
+							\]
+						</li>
+
+						<li><strong>Choose $r$ via energy threshold $\tau$</strong>:
+							\[
+							r = \min\Big\{ k : \sum_{i=1}^{k}\sigma_i \ge \tau \sum_{i=1}^{n}\sigma_i \Big\}.
+							\]
+						</li>
+
+						<li><strong>Compute balancing transform $\mathbf{T}$</strong>  if reduction is warranted ($r/n < \rho$ for some practical $\rho$, e.g. $0.95$) and form the balanced realization
+							\(\mathbf{A}_b=\mathbf{T}^{-1}\mathbf{A}\mathbf{T},\; \mathbf{B}_b=\mathbf{T}^{-1}\mathbf{B},\; \mathbf{C}_b=\mathbf{C}\mathbf{T}.\)
+						</li>
+
+						<li><strong>Truncate</strong> by slicing the leading $r$ coordinates in balanced form:
+							\[
+							\mathbf{A}_r=\mathbf{A}_b[:r,:r],\quad \mathbf{B}_r=\mathbf{B}_b[:r,:],\quad \mathbf{C}_r=\mathbf{C}_b[:, :r].
+							\]
+						</li>
+
+						<li><strong>Replace weights</strong> and continue training on the smaller system. For diagonal-structured SSMs, map $\mathbf{A}_r$ back to the reduced diagonal parametrization.</li>
+					</ol>
+				</section>
+
+                <section id="experiments" style="margin-top:2em;">
+  
+                    <h2>Results</h2>
+                        <p>
+                        To validate our in-training compression approach, we train a linear recurrent unit (LRU) with 6 layers on standard benchmarks including CIFAR10. We begin reduction from the full model size of 384 states per block and perform four evenly spaced truncation steps during the learning rate warm-up phase (first 10 % of training).
+                    </p>
+                    <div style="display: flex; justify-content: center; gap: 1em; margin-top: 1em;">
+                        <img src="../files/scifar-ulti-all_test_vs_dim.png" alt="Test Accuracy vs State Dimension" style="width:48%; max-width:400px; margin-bottom: 1em;">
+                        <img src="../files/scifar-ulti-adapt_test_vs_time.png" alt="Test Accuracy vs Training Time" style="width:48%; max-width:400px; margin-bottom: 1em;">
+                    </div>
+                        <p>
+                        The plots above show the performance of compressed and non-compressed models. The left panel plots test accuracy versus final state dimension, while the right panel plots accuracy versus normalized training time. Grey points indicate non-reduced models, and shades of orange represent models compressed during training with varying energy tolerances.
+                        </p>
+                        <p>
+                        Rather than collapsing, CompreSSM models 
+                        <strong>retain key task-relevant dynamics even at small state dimensions</strong> — 
+                        a capability that models trained <em>from scratch</em> at the same size fail to match. 
+                        Furthermore, models that begin large and are <strong>compressed in training</strong> 
+                        converge nearly as fast as models that <em>start</em> at the final reduced size, 
+                        yet <strong>achieve performance close to the original full-size model</strong>, 
+                        combining efficiency with high fidelity.
+                        </p>
+                    </section>
+                    </section>
+
+
+			</div>
+		</div>
+
+        <!-- Sidebar -->
+        <div id="sidebar">
+            <!-- Sidebar -->
+            <div class="inner">
+
+                <!-- Menu -->
+                <nav id="menu">
+                    <header class="major"><h2>Menu</h2></header>
+                    <ul>
+                        <li><a href="../index.html">Homepage</a></li>
+                        <li><a href="compressm.html">CompreSSM – Paper Walkthrough</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Contact -->
+                <section>
+                    <header class="major"><h2>Contact information</h2></header>
+                    <ul class="contact">
+                        <li class="icon solid fa-envelope">chahine [at] mit [dot] edu</li>
+                        <li class="icon brands fa-twitter"><a href="https://twitter.com/makinai_">Twitter</a></li>
+                        <li class="icon brands fa-github"><a href="https://github.com/makramchahine">Github</a></li>
+                        <li class="icon brands fa-linkedin"><a href="https://www.linkedin.com/in/mc8/">Linkedin</a></li>
+                    </ul>
+                </section>
+
+                <!-- Footer -->
+                <footer id="footer">
+                    <p class="copyright">&copy; All rights reserved. Design: <a href="https://html5up.net">HTML5 UP</a>.</p>
+                </footer>
+            </div>
+	    </div>
+
+	<!-- Scripts (as in your site) -->
+	<script src="../assets/js/jquery.min.js"></script>
+	<script src="../assets/js/browser.min.js"></script>
+	<script src="../assets/js/breakpoints.min.js"></script>
+	<script src="../assets/js/util.js"></script>
+	<script src="../assets/js/main.js"></script>
+
+</body>
+</html>
