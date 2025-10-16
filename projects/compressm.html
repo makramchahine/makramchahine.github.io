@@ -119,6 +119,13 @@ details[open] .content-wrapper {
                                           <p>
                                             State-space models (SSMs) are a potent tool for sequence modeling. At their core, all they rely on an incremental recurrence: at each step, the model updates a hidden state that summarizes all relevant information from the past.
                                           </p>
+                                        <div style="display: flex; flex-direction: column; align-items: center; gap: 0em; margin: 2em 0;">
+                                            <img src="../files/si.png" alt="First illustration" style="width:100%; max-width:600px;">
+                                            <!-- <img src="../files/so.png" alt="Second illustration" style="width:100%; max-width:600px;"> -->
+                                            <div style="font-size: 0.8em; color: #666; margin-top: 0.5em; text-align: center;">
+                                                Figure borrowed from Maarten Grootendorst's Visual Guide to Mamba and State Space Models
+                                            </div>
+                                        </div>
                                           <p>
                                             The cost of computing an update scales with the dimension of the hidden state, yet its different dimensions are far from being equally important. Some may be redundant or offer no contribution to the learning process. Hence, our motivation: <strong>identify</strong> and <strong>truncate</strong> the unnecessary parts of the hidden state <strong>in-training</strong> without sacrificing performance.
                                           </p>
