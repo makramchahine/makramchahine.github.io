@@ -77,6 +77,31 @@ details[open] .content-wrapper {
     font-weight: bold;
     font-size: 1.05em;
   }
+  
+  /* Hero header with matryoshka image */
+  .compressm-hero {
+    background: linear-gradient(135deg, #f5f5f5 0%, #fafafa 100%);
+    padding: 2.5em 0;
+    margin: 0 0 2.5em 0;
+    text-align: center;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .compressm-hero img {
+    max-width: 500px;
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
+    display: block;
+  }
+  
+  .compressm-hero-caption {
+    font-size: 0.85em;
+    color: #666;
+    margin-top: 1em;
+    font-style: italic;
+  }
+
 </style>
 </head>
 <body class="is-preload">
@@ -99,6 +124,7 @@ details[open] .content-wrapper {
 
 				<!-- Banner / Lead -->
 				<section id="banner">
+					
 					<div class="content">
 						<header>
                                             <h1>CompreSSM walkthrough</h1>
@@ -113,6 +139,15 @@ details[open] .content-wrapper {
                                         <p>
                                             You can follow the links for the <a href="https://www.arxiv.org/abs/2510.02823">paper</a> and <a href="https://github.com/camail-official/compressm" target="_blank">implementation</a>.
                                         </p>
+
+                                        <!-- Hero Section with Matryoshka Image -->
+                                        <div class="compressm-hero" style="margin: 2.5em 0; padding: 2.5em 0;">
+                                            <img src="../files/matryoshka_compressm.png" alt="Model compression through progressive truncation - represented as matryoshka dolls">
+                                            <div class="compressm-hero-caption">
+                                                CompreSSM: progressively truncating low-energy state dimensions during training<br>
+                                                <em style="font-size: 0.6em; color: #888;">Image generated with Google Nano Banana</em>
+                                            </div>
+                                        </div>
 
                                         <section id="motivation" style="margin-top:2em;">
                                           <h2>Motivation</h2>
